@@ -36,8 +36,8 @@ struct MinCollector {
          }
        }
 
-  int collect(std::vector<std::pair<KmerEntry,int>>& v1,
-              std::vector<std::pair<KmerEntry,int>>& v2,
+  int collect(std::vector< std::pair<KmerEntry,int> >& v1,
+              std::vector< std::pair<KmerEntry,int> >& v2,
               bool nonpaired=false);
 
   int collect(std::vector<std::pair<KmerEntry,int>>& v1) {
@@ -49,6 +49,7 @@ struct MinCollector {
   int decreaseCount(const int ec);
 
   std::vector<int> intersectECs(std::vector<std::pair<KmerEntry,int>>& v) const;
+  std::vector<int> countECs(std::vector<int>& v) const;
   int intersectKmers(std::vector<std::pair<KmerEntry,int>>& v1,
                     std::vector<std::pair<KmerEntry,int>>& v2, bool nonpaired, std::vector<int> &u) const;
   int findEC(const std::vector<int>& u) const;

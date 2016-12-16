@@ -10,7 +10,7 @@ rule index:
     input: FASTA
     output: INDEX
     shell:
-        "kallisto index -i {output} {input}"
+        "../src/kallisto index -i {output} {input}"
 
 rule kallisto_quant:
     input:

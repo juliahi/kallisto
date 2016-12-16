@@ -27,6 +27,7 @@ KSEQ_INIT(gzFile, gzread)
 int ProcessReads(KmerIndex& index, const ProgramOptions& opt, MinCollector& tc);
 int ProcessBatchReads(KmerIndex& index, const ProgramOptions& opt, MinCollector& tc, std::vector<std::vector<int>> &batchCounts);
 
+
 class SequenceReader {
 public:
 
