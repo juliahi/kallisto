@@ -19,9 +19,9 @@ KALLISTO="/home/julia/kallisto_kod/src/kallisto"
 #echo 'genome_file prepared'
 
 ##build index for genome
-echo "build index for $K, $INDEX_FILE, $GENOMES_FILE" >> $LOGFILE
-$KALLISTO index -k $K -i $INDEX_FILE $GENOMES_FILE  2>> $LOGFILE
-echo 'index prepared'
+#echo "build index for $K, $INDEX_FILE, $GENOMES_FILE" >> $LOGFILE
+#$KALLISTO index -k $K -i $INDEX_FILE $GENOMES_FILE  2>> $LOGFILE
+#echo 'index prepared'
 #
 
 
