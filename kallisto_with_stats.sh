@@ -27,7 +27,7 @@ KALLISTO="/home/julia/kallisto_kod/src/kallisto"
 
 TYPE=depl
 #quantify
-for file in $INDIR/6685*${TYPE}_1.fq.gz; do
+for file in $INDIR/6685_16*${TYPE}_1.fq.gz; do
     FILENAME=${file%_1.fq.gz}
     OUTNAME=$OUTDIR/`basename ${FILENAME}`_kallisto_${K}_out
     echo $file
@@ -39,7 +39,7 @@ for file in $INDIR/6685*${TYPE}_1.fq.gz; do
             echo $COMMAND1
             echo $TIME
     #fi
-    exit
+    
 done
 
 
