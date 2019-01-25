@@ -401,7 +401,7 @@ void MinCollector::write(const std::string& pseudoprefix) const {
   countsof.close();
 }
 
-double MinCollector::get_mean_frag_len() const {
+double MinCollector::get_mean_frag_len(bool lenient) const {
   if (has_mean_fl) {
     return mean_fl;
   }
@@ -415,9 +415,13 @@ double MinCollector::get_mean_frag_len() const {
   }
 
   if (total_counts == 0) {
-    std::cerr << "Error: could not determine mean fragment length from paired end reads, no pairs mapped to a unique transcript." << std::endl
+    if (!lenient) {
+      std::cerr << "Error: could not determine mean fragment length from paired end reads, no pairs mapped to a unique transcript." << std::endl
               << "       Run kallisto quant again with a pre-specified fragment length (option -l)." << std::endl;
-    exit(1);
+      exit(1);
+    } else {
+      return std::numeric_limits<double>::max();
+    }
 
   }
 
@@ -427,9 +431,25 @@ double MinCollector::get_mean_frag_len() const {
   return mean_fl;
 }
 
+double MinCollector::get_sd_frag_len() const {
+  double tmp = get_mean_frag_len(true);
+  double m = mean_fl;
+
+  size_t total_counts = 0;
+  double total_mass = 0.0;
+  
+  for (size_t i = 0; i < flens.size(); ++i) {
+    total_counts += flens[i];
+    total_mass += flens[i]*(i-m)*(i-m);
+  }
+
+  double sd_fl = std::sqrt(total_mass/total_counts);
+  return sd_fl;
+}
 
 
-void MinCollector::compute_mean_frag_lens_trunc()  {
+
+void MinCollector::compute_mean_frag_lens_trunc(bool verbose)  {
 
   std::vector<int> counts(MAX_FRAG_LEN, 0);
   std::vector<double> mass(MAX_FRAG_LEN, 0.0);
@@ -448,8 +468,10 @@ void MinCollector::compute_mean_frag_lens_trunc()  {
 
   has_mean_fl_trunc = true;
 
-  std::cerr << "[quant] estimated average fragment length: " <<
-    mean_fl_trunc[MAX_FRAG_LEN - 1] << std::endl;
+  if (verbose) {
+    std::cerr << "[quant] estimated average fragment length: " <<
+      mean_fl_trunc[MAX_FRAG_LEN - 1] << std::endl;
+  }
 }
 
 int hexamerToInt(const char *s, bool revcomp) {

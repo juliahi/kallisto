@@ -70,10 +70,11 @@ struct MinCollector {
   bool countBias(const char *s1, const char *s2, const std::vector<std::pair<KmerEntry,int>> v1, const std::vector<std::pair<KmerEntry,int>> v2, bool paired, std::vector<int>& biasOut) const;
 
   // DEPRECATED
-  double get_mean_frag_len() const;
+  double get_mean_frag_len(bool lenient = false) const;
+  double get_sd_frag_len() const;
 
   // compute the conditional mean of each target given the FLD
-  void compute_mean_frag_lens_trunc();
+  void compute_mean_frag_lens_trunc(bool verbose = true);
 
   // this function should only be used for SE data
   void init_mean_fl_trunc(double mean, double sd);
