@@ -172,8 +172,6 @@ int64_t ProcessReads(MasterProcessor& MP, const  ProgramOptions& opt) {
     bam_hdr_t *t = createPseudoBamHeader(index);
     index.writePseudoBamHeader(std::cout);
   }*/
-
-  MasterProcessor MP(index, opt, tc);
   
   //redirect "stats" output
 
