@@ -103,6 +103,7 @@ struct KmerIndex {
 //  bool matchEnd(const char *s, int l, std::vector<std::pair<int, int>>& v, int p) const;
   int mapPair(const char *s1, int l1, const char *s2, int l2, int ec) const;
   std::vector<int> intersect(int ec, const std::vector<int>& v) const;
+  std::vector<int> setunion(int ec, const std::vector<int>& v) const;
 
 
 

@@ -34,6 +34,7 @@ int ProcessReads(MasterProcessor& MP, const  ProgramOptions& opt);
 int ProcessBatchReads(KmerIndex& index, const ProgramOptions& opt, MinCollector& tc, std::vector<std::vector<int>> &batchCounts);
 int findFirstMappingKmer(const std::vector<std::pair<KmerEntry,int>> &v,KmerEntry &val);
 
+
 class SequenceReader {
 public:
 

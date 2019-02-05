@@ -1362,6 +1362,51 @@ std::vector<int> KmerIndex::intersect(int ec, const std::vector<int>& v) const {
 }
 
 
+
+// use:  res = intersect(ec,v)
+// pre:  ec is in ecmap, v is a vector of valid targets
+//       v is sorted in increasing order
+// post: res contains the union  of ecmap[ec] and v sorted increasing
+//       res is empty if ec is not in ecma
+std::vector<int> KmerIndex::setunion(int ec, const std::vector<int>& v) const {
+  std::vector<int> res;
+  //auto search = ecmap.find(ec);
+  if (ec < ecmap.size()) {
+    //if (search != ecmap.end()) {
+    //auto& u = search->second;
+    auto& u = ecmap[ec];
+    res.reserve(v.size());
+
+    auto a = u.begin();
+    auto b = v.begin();
+
+    while (a != u.end() && b != v.end()) {
+      if (*a < *b) {
+        res.push_back(*a);
+        ++a;
+      } else if (*b < *a) {
+        res.push_back(*b);
+        ++b;
+      } else {
+        // match
+        res.push_back(*a);
+        ++a;
+        ++b;
+      }
+    }  
+    while (a != u.end()) {
+        res.push_back(*a);
+        ++a;
+    }  
+    while (b != v.end()) {
+        res.push_back(*b);
+        ++b;
+    }
+  }
+  return res;
+}
+
+
 void KmerIndex::loadTranscriptSequences() const {
   if (target_seqs_loaded) {
     return;

@@ -180,8 +180,23 @@ int ProcessReads(MasterProcessor& MP, const  ProgramOptions& opt) {
     index.writePseudoBamHeader(std::cout);
   }*/
 
+  //MasterProcessor MP(index, opt, tc);
+  
+  //redirect "stats" output
+
+  
+  std::string outfile = opt.output + "/stats.txt";
+  std::streambuf* oldCoutStreamBuf = std::cout.rdbuf();
+  std::ofstream strCout(outfile);
+  std::cout.rdbuf( strCout.rdbuf() );
+
+
   
   MP.processReads();
+  
+  // Restore old cout.
+  std::cout.rdbuf( oldCoutStreamBuf );
+  
   numreads = MP.numreads;
   nummapped = MP.nummapped;
   std::cerr << " done" << std::endl;

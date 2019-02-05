@@ -21,6 +21,37 @@ std::vector<int> intersect(const std::vector<int>& x, const std::vector<int>& y)
   return v;
 }
 
+
+std::vector<int> setunion(const std::vector<int>& x, const std::vector<int>& y) {
+  std::vector<int> v;
+  auto a = x.begin();
+  auto b = y.begin();
+  while (a != x.end() && b != y.end()) {
+    if (*a < *b) {
+      v.push_back(*a);
+      ++a;
+    } else if (*b < *a) {
+      v.push_back(*b);
+      ++b;
+    } else {
+      v.push_back(*a);
+      ++a;
+      ++b;
+    }
+  }
+  while (a != x.end()) {
+    v.push_back(*a);
+    ++a;
+  }  
+  while (b != y.end()) {
+      v.push_back(*b);
+      ++b;
+  }
+  
+  return v;
+}
+
+
 void MinCollector::init_mean_fl_trunc(double mean, double sd) {
   auto tmp_trunc_fl = trunc_gaussian_fld(0, MAX_FRAG_LEN, mean, sd);
   assert( tmp_trunc_fl.size() == mean_fl_trunc.size() );
@@ -33,12 +64,40 @@ void MinCollector::init_mean_fl_trunc(double mean, double sd) {
   has_mean_fl_trunc = true;
 }
 
+template<class T1, class T2>
+static void extract_second(const std::vector<std::pair<T1, T2> >& v, std::vector<T2>& v2) {
+    v2.resize(v.size());
+    for (size_t i = 0; i < v.size(); i++) {
+        v2[i] = v[i].second;
+    }
+}
+
 int MinCollector::intersectKmers(std::vector<std::pair<KmerEntry,int>>& v1,
                           std::vector<std::pair<KmerEntry,int>>& v2, bool nonpaired, std::vector<int> &u) const {
+  
+  std::vector<int> con1;
+  std::transform(v1.begin(), v1.end(), std::back_inserter(con1), [](std::pair<KmerEntry,int> p) { return p.second; });
+  con1.resize(std::distance(con1.begin(), unique(con1.begin(), con1.end())));
+  std::vector<int> con2;
+  std::transform(v2.begin(), v2.end(), std::back_inserter(con2), [](std::pair<KmerEntry,int> p) { return p.second; });
+  con2.resize(std::distance(con2.begin(), unique(con2.begin(), con2.end())));
+  std::vector<int> con3 = setunion(con1, con2);
+    
+  
+  
+  std::vector<int> c1 = countECs(con1);
+  std::vector<int> c2 = countECs(con2);
+  std::vector<int> c3 = setunion(c1, c2);
+  
+    
   std::vector<int> u1 = intersectECs(v1);
   std::vector<int> u2 = intersectECs(v2);
+  
+  std::cout << v1.size() << "\t" << v2.size() << "\t" << con1.size() << "\t" << con2.size() << "\t" << con3.size() << "\t" ;
+  std::cout << c1.size() << "\t" << c2.size() << "\t" << c3.size() << "\t" << u1.size() << "\t" << u2.size() << "\t" ;
 
   if (u1.empty() && u2.empty()) {
+        std::cout << "0" << std::endl;
     return -1;
   }
 
@@ -47,12 +106,14 @@ int MinCollector::intersectKmers(std::vector<std::pair<KmerEntry,int>>& v1,
     if (v1.empty()) {
       u = u2;
     } else {
+        std::cout << "0" << std::endl;
       return -1;
     }
   } else if (u2.empty()) {
     if (v2.empty()) {
       u = u1;
     } else {
+        std::cout << "0" << std::endl;
       return -1;
     }
   } else {
@@ -60,8 +121,10 @@ int MinCollector::intersectKmers(std::vector<std::pair<KmerEntry,int>>& v1,
   }
 
   if (u.empty()) {
+        std::cout << "0" << std::endl;
     return -1;
   }
+          std::cout << u.size() << std::endl;
   return 1;
 }
 
@@ -205,6 +268,72 @@ std::vector<int> MinCollector::intersectECs(std::vector<std::pair<KmerEntry,int>
 
   return u;
 }
+
+
+
+std::vector<int> MinCollector::countECs(std::vector<int>& v) const {
+  if (v.empty()) {
+    return {};
+  }
+  sort(v.begin(), v.end()); // sort 
+
+
+  int ec = index.dbGraph.ecs[v[0]];
+  int lastEC = ec;
+  std::vector<int> u = index.ecmap[ec];
+
+  for (int i = 1; i < v.size(); i++) {
+    if (v[i] != v[i-1]) {
+      ec = index.dbGraph.ecs[v[i]];
+      if (ec != lastEC) {
+        u = index.setunion(ec, u);
+        lastEC = ec;
+        if (u.empty()) {
+          return u;
+        }
+      }
+    }
+  }
+
+  return u;
+}
+
+
+/*std::vector<int> MinCollector::countECs(std::vector<std::pair<KmerEntry,int>>& v) const {
+  if (v.empty()) {
+    return {};
+  }
+  sort(v.begin(), v.end(), [&](std::pair<KmerEntry, int> a, std::pair<KmerEntry, int> b)
+       {
+         if (a.first.contig==b.first.contig) {
+           return a.second < b.second;
+         } else {
+           return a.first.contig < b.first.contig;
+         }
+       }); // sort by contig, and then first position
+
+
+  int ec = index.dbGraph.ecs[v[0].first.contig];
+  int lastEC = ec;
+  std::vector<int> u = index.ecmap[ec];
+
+  for (int i = 1; i < v.size(); i++) {
+    if (v[i].first.contig != v[i-1].first.contig) {
+      ec = index.dbGraph.ecs[v[i].first.contig];
+      if (ec != lastEC) {
+        u = index.setunion(ec, u);
+        lastEC = ec;
+        if (u.empty()) {
+          return u;
+        }
+      }
+    }
+  }
+
+  return u;
+}*/
+
+
 
 
 void MinCollector::loadCounts(ProgramOptions& opt) {
