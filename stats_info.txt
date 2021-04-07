@@ -1,0 +1,19 @@
+This modification of kallisto outputs to sample output directory file stats.txt with 11 columns:
+1: kmers from read1 present in transcripts 
+2: kmers from read2 present in transcripts
+3: equivalence classes for read1
+4: equivalence classes for read2
+6: size of union of sets of transcripts for read 1
+7: size of union of sets of transcripts for read 2
+8: size of union of sets of transcripts for both reads
+9: size of intersection of transcripts for read1
+10: size of intersection of transcripts for read2
+11: size of intersection of transcripts = number of mappings
+
+The stats.txt file can be interpretted by python class in read_kallisto_stats.py 
+
+Modified files:
+src/MinCollector.cpp
+src/KmerIndex.cpp
+src/ProcessReads.cpp 
+- 
