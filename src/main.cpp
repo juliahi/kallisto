@@ -23,6 +23,7 @@
 #include "Inspect.h"
 #include "Bootstrap.h"
 #include "H5Writer.h"
+#include "PlaintextWriter.h"
 #include "GeneModel.h"
 #include "Merge.h"
 
@@ -238,6 +239,7 @@ void ParseOptionsEM(int argc, char **argv, ProgramOptions& opt) {
     }
     case 'c': {
       stringstream(optarg) >> opt.chromFile;
+      break;
     }
     case 'd': {
       stringstream(optarg) >> opt.seed;
@@ -452,7 +454,7 @@ void ParseOptionsPseudo(int argc, char **argv, ProgramOptions& opt) {
   
   if (umi_flag) {
     opt.umi = true;
-    opt.single_end = true; // UMI implies single end reads
+    opt.single_end = true; // UMI implies single-end reads
   }
 
   // all other arguments are fast[a/q] files to be read
@@ -524,30 +526,44 @@ void ParseOptionsMerge(int argc, char **argv, ProgramOptions& opt) {
 
 void ListSingleCellTechnologies() {
   //todo, figure this out
-  cout << "List of supported single cell technologies" << endl << endl 
+  cout << "List of supported single-cell technologies" << endl << endl 
   << "short name       description" << endl
   << "----------       -----------" << endl
-  << "10Xv1            10X chemistry version 1" << endl
-  << "10Xv2            10X chemistry verison 2" << endl
-  << "DropSeq          DropSeq" << endl
-  << "inDrop           inDrop" << endl
+  << "10xv1            10x version 1 chemistry" << endl
+  << "10xv2            10x version 2 chemistry" << endl
+  << "10xv3            10x version 3 chemistry" << endl
   << "CELSeq           CEL-Seq" << endl
   << "CELSeq2          CEL-Seq version 2" << endl
+  << "DropSeq          DropSeq" << endl
+  << "inDropsv1        inDrops version 1 chemistry" << endl
+  << "inDropsv2        inDrops version 2 chemistry" << endl
+  << "inDropsv3        inDrops version 3 chemistry" << endl
   << "SCRBSeq          SCRB-Seq" << endl
+  << "SureCell         SureCell for ddSEQ" << endl
   << endl;
  }
 
 void ParseOptionsBus(int argc, char **argv, ProgramOptions& opt) {
-  int list_flag = 0;
-  const char *opt_string = "i:o:x:t:";
+  int verbose_flag = 0;
+  int gbam_flag = 0;
+
+  const char *opt_string = "i:o:x:t:lbng:c:";
   static struct option long_options[] = {
+    {"verbose", no_argument, &verbose_flag, 1},
     {"index", required_argument, 0, 'i'},
     {"output-dir", required_argument, 0, 'o'},
     {"technology", required_argument, 0, 'x'},
-    {"list", no_argument, &list_flag, 'l'},
+    {"list", no_argument, 0, 'l'},
     {"threads", required_argument, 0, 't'},
+    {"bam", no_argument, 0, 'b'},
+    {"num", no_argument, 0, 'n'},
+    {"genomebam", no_argument, &gbam_flag, 1},
+    {"gtf", required_argument, 0, 'g'},
+    {"chromosomes", required_argument, 0, 'c'},
     {0,0,0,0}
   };
+
+  int list_flag = 0;
   int c;
   int option_index = 0;
   while (true) {
@@ -564,6 +580,10 @@ void ParseOptionsBus(int argc, char **argv, ProgramOptions& opt) {
       opt.index = optarg;
       break;
     }
+    case 'l': {
+      list_flag = 1;
+      break;
+    }
     case 'o': {
       opt.output = optarg;
       break;
@@ -577,6 +597,22 @@ void ParseOptionsBus(int argc, char **argv, ProgramOptions& opt) {
       stringstream(optarg) >> opt.threads;
       break;
     }
+    case 'b': {
+      opt.bam = true;
+      break;
+    }
+    case 'n': {
+      opt.num = true;
+      break;
+    }
+    case 'g': {
+      stringstream(optarg) >> opt.gtfFile;
+      break;
+    }
+    case 'c': {
+      stringstream(optarg) >> opt.chromFile;
+      break;
+    }
     default: break;
     }
   }
@@ -586,12 +622,130 @@ void ParseOptionsBus(int argc, char **argv, ProgramOptions& opt) {
     exit(1);
   }
   
+  if (verbose_flag) {
+    opt.verbose = true;
+  }
+
+  if (gbam_flag) {
+    opt.pseudobam = true;
+    opt.genomebam = true;    
+  }
+
+  
   // all other arguments are fast[a/q] files to be read
   for (int i = optind; i < argc; i++) {
     opt.files.push_back(argv[i]);
   }
  
 }
+
+bool ParseTechnology(const std::string &techstr, BUSOptions& busopt, std::vector<std::string> &errorList) {
+  auto i1 = techstr.find(':');
+  if (i1 == std::string::npos) {
+    errorList.push_back("Error: technology string must contain two colons (:), none found: \"" + techstr + "\"");    
+    return false;
+  }
+  auto i2 = techstr.find(':', i1+1);
+  if (i2 == std::string::npos) {
+    errorList.push_back("Error: technology string must contain two colons (:), only one found: \"" + techstr + "\"");    
+    return false;
+  }
+  auto ip = techstr.find(':', i2+1);
+  if (ip != std::string::npos) {
+    errorList.push_back("Error: technology string must contain two colons (:), three found: \"" + techstr + "\"");    
+    return false;
+  }
+  auto bcstr = techstr.substr(0, i1);
+  auto umistr = techstr.substr(i1+1,i2-i1-1);
+  auto seqstr = techstr.substr(i2+1);
+  
+
+
+  int maxnf = 0;
+
+  auto convert_commas_to_vector = [&](const std::string &s, std::vector<BUSOptionSubstr> &v) -> bool {
+    std::vector<int> vv;
+    v.clear();
+    std::stringstream ss(s);
+    std::string t;
+    while (std::getline(ss, t, ',')) {
+      try {
+        int i = stoi(t);
+        vv.push_back(i);
+      } catch (std::invalid_argument &e) {
+        errorList.push_back("Error: converting to int: \"" + t + "\"");
+        return false;
+      }
+    }
+
+    int nv = vv.size();
+    if (nv % 3 == 0) {
+      for (int i = 0; i+2 < nv; i+=3) {
+        int f = vv[i];
+        int a = vv[i+1];
+        int b = vv[i+2];
+        if (f < 0) {
+          errorList.push_back("Error: invalid file number (" + to_string(f) + ")  " + s);
+        }
+        if (a <  0) {
+          errorList.push_back("Error: invalid start (" + to_string(a) + ")  " + s);
+        }
+        if (b != 0 && b <= a) {
+          errorList.push_back("Error: invalid stop (" + to_string(b) + ") has to be after start (" + to_string(a) + ")  " + s);
+        }
+        v.push_back(BUSOptionSubstr(f,a,b));
+        if (f > maxnf) {
+          maxnf = f;
+        }
+      }
+    } else {
+      errorList.push_back("Error: number of values has to be multiple of 3 " + s);
+      return false;
+    }
+
+    busopt.nfiles = maxnf+1;
+    return true;
+  };
+
+  
+
+  std::vector<BUSOptionSubstr> v;
+  if (!convert_commas_to_vector(bcstr,v)) {
+    return false;
+  }
+  if (v.empty()) {
+    errorList.push_back("Error: empty barcode list " + bcstr);
+    return false;
+  }
+  busopt.bc = std::move(v);
+
+  if (!convert_commas_to_vector(umistr, v)) {
+    return false;
+  }
+  if (v.empty()) {
+    errorList.push_back("Error: empty UMI list " + umistr);
+    return false;
+  }
+  if (v.size() != 1) {
+    errorList.push_back("Error: only a single UMI list allow " + umistr);
+    return false;
+  }
+  busopt.umi = std::move(v.front());
+
+
+  if (!convert_commas_to_vector(seqstr, v)) {
+    return false;
+  }
+  if (v.empty()) {
+    errorList.push_back("Error: empty sequence list " + bcstr);
+    return false;
+  }
+
+  busopt.seq = std::move(v);
+
+  return true;
+}
+
 
 
 void ParseOptionsH5Dump(int argc, char **argv, ProgramOptions& opt) {
@@ -705,53 +859,214 @@ bool CheckOptionsBus(ProgramOptions& opt) {
     ret = false;
   } else {
     auto& busopt = opt.busOptions;
-    
-    if (opt.technology == "10XV2") {
-      busopt.nfiles = 2;
-      busopt.seq = BUSOptionSubstr(1,0,0); // second file, entire string
-      busopt.umi = BUSOptionSubstr(0,16,26); // first file [16:26]
-      busopt.bc.push_back(BUSOptionSubstr(0,0,16));
-    } else if (opt.technology == "10XV1") {
-      busopt.nfiles = 3;
-      busopt.seq = BUSOptionSubstr(0,0,0);
-      busopt.umi = BUSOptionSubstr(1,0,0);
-      busopt.bc.push_back(BUSOptionSubstr(2,0,0));
-    } else if (opt.technology == "DROPSEQ") {
-      busopt.nfiles = 2;
-      busopt.seq = BUSOptionSubstr(1,0,0);
-      busopt.umi = BUSOptionSubstr(0,12,20);
-      busopt.bc.push_back(BUSOptionSubstr(0,0,12));
-    } else if (opt.technology == "INDROP") {
-      busopt.nfiles = 2;
-      busopt.seq = BUSOptionSubstr(1,0,0);
-      busopt.umi = BUSOptionSubstr(0,42,48);
-      busopt.bc.push_back(BUSOptionSubstr(0,0,11));
-      busopt.bc.push_back(BUSOptionSubstr(0,30,38));    
-    } else if (opt.technology == "CELSEQ") {
-      busopt.nfiles = 2;
-      busopt.seq = BUSOptionSubstr(1,0,0);
-      busopt.umi = BUSOptionSubstr(0,8,12);
-      busopt.bc.push_back(BUSOptionSubstr(0,0,8));
-    } else if (opt.technology == "CELSEQ2") {
-      busopt.nfiles = 2;
-      busopt.seq = BUSOptionSubstr(1,0,0);
-      busopt.umi = BUSOptionSubstr(0,0,6);
-      busopt.bc.push_back(BUSOptionSubstr(0,6,12));
-    } else if (opt.technology == "SCRBSEQ") {
-      busopt.nfiles = 2;
-      busopt.seq = BUSOptionSubstr(1,0,0);
-      busopt.umi = BUSOptionSubstr(0,6,16);
-      busopt.bc.push_back(BUSOptionSubstr(0,0,6));
+   
+    if (opt.bam) { // Note: only 10xV2 has been tested
+      busopt.nfiles = 1;
+      if (opt.technology == "10XV2") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0)); // second file, entire string
+        busopt.umi = BUSOptionSubstr(0,16,26); // first file [16:26]
+        busopt.bc.push_back(BUSOptionSubstr(0,0,16));
+      } else if (opt.technology == "10XV3") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,16,28);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,16));
+//      } else if (opt.technology == "10XV1") {
+
+      } else if (opt.technology == "SURECELL") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,18,26);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,18));
+      } else if (opt.technology == "DROPSEQ") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,12,20);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,12));
+      } else if (opt.technology == "INDROPSV1") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,42,48);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,11));
+        busopt.bc.push_back(BUSOptionSubstr(0,30,38));  
+      } else if (opt.technology == "INDROPSV2") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(0,0,0));
+        busopt.umi = BUSOptionSubstr(1,42,48);
+        busopt.bc.push_back(BUSOptionSubstr(1,0,11));
+        busopt.bc.push_back(BUSOptionSubstr(1,30,38));  
+      } else if (opt.technology == "INDROPSV3") {
+        busopt.nfiles = 3;
+        busopt.seq.push_back(BUSOptionSubstr(2,0,0));
+        busopt.umi = BUSOptionSubstr(1,8,14);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,8));
+        busopt.bc.push_back(BUSOptionSubstr(1,0,8));
+      } else if (opt.technology == "CELSEQ") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,8,12);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,8));
+      } else if (opt.technology == "CELSEQ2") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,0,6);
+        busopt.bc.push_back(BUSOptionSubstr(0,6,12));
+      } else if (opt.technology == "SCRBSEQ") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,6,16);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,6));
+      } else if (opt.technology == "INDROPSV3") {
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,0,6);
+        busopt.bc.push_back(BUSOptionSubstr(0,6,16));
+      } else {
+        vector<int> files;
+        vector<BUSOptionSubstr> values;
+        vector<BUSOptionSubstr> bcValues;
+        vector<std::string> errorList;
+        //bool invalid = ParseTechnology(opt.technology, values, files, errorList, bcValues);
+        bool valid = ParseTechnology(opt.technology, busopt, errorList);
+        
+        if(!valid) {
+          /*
+          busopt.nfiles = files.size(); 
+          for(int i = 0; i < bcValues.size(); i++) {
+            busopt.bc.push_back(bcValues[i]);
+          }
+          busopt.umi = values[0];
+          busopt.seq.push_back(values[1]);
+          */
+        } else {
+          for(int j = 0; j < errorList.size(); j++) {
+            cerr << errorList[j] << endl;
+          }
+          cerr << "Unable to create technology: " << opt.technology << endl;
+          ret = false;
+        }
+      }
     } else {
-      cerr << "Unknown technology: " << opt.technology << endl;
-      ret = false;
+      if (opt.technology == "10XV2") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0)); // second file, entire string
+        busopt.umi = BUSOptionSubstr(0,16,26); // first file [16:26]
+        busopt.bc.push_back(BUSOptionSubstr(0,0,16));
+      } else if (opt.technology == "10XV3") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,16,28);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,16));
+      } else if (opt.technology == "10XV1") {
+        busopt.nfiles = 3;
+        busopt.seq.push_back(BUSOptionSubstr(2,0,0));
+        busopt.umi = BUSOptionSubstr(1,0,10);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,14));
+      } else if (opt.technology == "SURECELL") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,51,59);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,6));
+        busopt.bc.push_back(BUSOptionSubstr(0,21,27));
+        busopt.bc.push_back(BUSOptionSubstr(0,42,48));
+      } else if (opt.technology == "DROPSEQ") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,12,20);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,12));
+      } else if (opt.technology == "INDROPSV1") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,42,48);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,11));
+        busopt.bc.push_back(BUSOptionSubstr(0,30,38));  
+      } else if (opt.technology == "INDROPSV2") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(0,0,0));
+        busopt.umi = BUSOptionSubstr(1,42,48);
+        busopt.bc.push_back(BUSOptionSubstr(1,0,11));
+        busopt.bc.push_back(BUSOptionSubstr(1,30,38));  
+      } else if (opt.technology == "INDROPSV3") {
+        busopt.nfiles = 3;
+        busopt.seq.push_back(BUSOptionSubstr(2,0,0));
+        busopt.umi = BUSOptionSubstr(1,8,14);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,8));
+        busopt.bc.push_back(BUSOptionSubstr(1,0,8));
+      } else if (opt.technology == "CELSEQ") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,8,12);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,8));
+      } else if (opt.technology == "CELSEQ2") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,0,6);
+        busopt.bc.push_back(BUSOptionSubstr(0,6,12));
+      } else if (opt.technology == "SCRBSEQ") {
+        busopt.nfiles = 2;
+        busopt.seq.push_back(BUSOptionSubstr(1,0,0));
+        busopt.umi = BUSOptionSubstr(0,6,16);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,6));
+      } else if (opt.technology == "INDROPSV3") {
+        busopt.nfiles = 3;
+        busopt.seq.push_back(BUSOptionSubstr(2,0,0));
+        busopt.umi = BUSOptionSubstr(1,8,14);
+        busopt.bc.push_back(BUSOptionSubstr(0,0,8));
+        busopt.bc.push_back(BUSOptionSubstr(1,0,8));
+      } else {
+        vector<int> files;
+        vector<BUSOptionSubstr> values;
+        vector<BUSOptionSubstr> bcValues;
+        vector<std::string> errorList;        
+        //bool invalid = ParseTechnology(opt.technology, values, files, errorList, bcValues);
+        bool valid = ParseTechnology(opt.technology, busopt, errorList);
+        
+        
+        if(valid) {
+          /*
+          busopt.nfiles = files.size(); 
+          for(int i = 0; i < bcValues.size(); i++) {
+            busopt.bc.push_back(bcValues[i]);
+          }
+          busopt.umi = values[0];
+          busopt.seq.push_back(values[1]);
+          */
+        } else {
+          for(int j = 0; j < errorList.size(); j++) {
+            cerr << errorList[j] << endl;
+          }
+          cerr << "Unable to create technology: " << opt.technology << endl;
+          ret = false;
+        }
+      }
     }
   }
 
-  if (ret && opt.files.size() %  opt.busOptions.nfiles != 0) {
+  if (opt.genomebam) {
+    if (opt.busOptions.seq.size() != 1) {
+      cerr << "Error: BAM output is currently only supported for technologies with a single CDNA read file" << endl;
+      ret = false;
+    }
+    if (!opt.gtfFile.empty()) {
+      if (!checkFileExists(opt.gtfFile)) {
+        cerr << "Error: GTF file " << opt.gtfFile << " does not exist" << endl;
+        ret = false;
+      }
+    } else {
+      cerr << "Error: need GTF file for genome alignment" << endl;
+      ret = false;
+    }
+    if (!opt.chromFile.empty()) {
+      if (!checkFileExists(opt.chromFile)) {
+        cerr << "Error: Chromosome file not found: " << opt.chromFile << endl;
+        ret = false;
+      }
+    }
+  }
+
+  
+
+  if (ret && !opt.bam && opt.files.size() %  opt.busOptions.nfiles != 0) {
     cerr << "Error: Number of files (" << opt.files.size() << ") does not match number of input files required by "
     << "technology " << opt.technology << " (" << opt.busOptions.nfiles << ")" << endl;
     ret = false;
+  }
+
+  if (opt.bam && opt.num) {
+    cerr << "Warning: --bam option was used, so --num option will be ignored" << endl;
   }
 
   return ret;
@@ -833,7 +1148,7 @@ bool CheckOptionsEM(ProgramOptions& opt, bool emonly = false) {
 
     /*
     if (opt.strand_specific && !opt.single_end) {
-      cerr << "Error: strand-specific mode requires single end mode" << endl;
+      cerr << "Error: strand-specific mode requires single-end mode" << endl;
       ret = false;
     }*/
 
@@ -976,6 +1291,14 @@ bool CheckOptionsEM(ProgramOptions& opt, bool emonly = false) {
     ret = false;
   }
 
+  #ifndef USE_HDF5  
+  if (opt.bootstrap > 0 && !opt.plaintext) {
+    cerr << "Warning: kallisto was not compiled with HDF5 support so no bootstrapping" << endl
+         << "will be performed. Run quant with --plaintext option or recompile with" << endl
+         << "HDF5 support to obtain bootstrap estimates." << endl;
+    opt.bootstrap = 0;
+  }
+  #endif
   return ret;
 }
 
@@ -1171,7 +1494,7 @@ bool CheckOptionsPseudo(ProgramOptions& opt) {
 
   /*
   if (opt.strand_specific && !opt.single_end) {
-    cerr << "Error: strand-specific mode requires single end mode" << endl;
+    cerr << "Error: strand-specific mode requires single-end mode" << endl;
     ret = false;
   }*/
 
@@ -1378,7 +1701,7 @@ void usage() {
        << "Where <CMD> can be one of:" << endl << endl
        << "    index         Builds a kallisto index "<< endl
        << "    quant         Runs the quantification algorithm " << endl
-       << "    bus           Generate BUS files for single cell data " << endl
+       << "    bus           Generate BUS files for single-cell data " << endl
        << "    pseudo        Runs the pseudoalignment step " << endl
        << "    merge         Merges several batch runs " << endl
        << "    h5dump        Converts HDF5-formatted results to plaintext" << endl
@@ -1390,16 +1713,19 @@ void usage() {
 
 void usageBus() {
   cout << "kallisto " << KALLISTO_VERSION << endl
-       << "Generates BUS files for single cell sequencing" << endl << endl
+       << "Generates BUS files for single-cell sequencing" << endl << endl
        << "Usage: kallisto bus [arguments] FASTQ-files" << endl << endl
        << "Required arguments:" << endl
        << "-i, --index=STRING            Filename for the kallisto index to be used for" << endl
        << "                              pseudoalignment" << endl
        << "-o, --output-dir=STRING       Directory to write output to" << endl 
-       << "-x, --technology=STRING       Single cell technology used " << endl << endl
+       << "-x, --technology=STRING       Single-cell technology used " << endl << endl
        << "Optional arguments:" << endl
-       << "-l, --list                    List all single cell technologies supported" << endl
-       << "-t, --threads=INT             Number of threads to use (default: 1)" << endl;
+       << "-l, --list                    List all single-cell technologies supported" << endl
+       << "-t, --threads=INT             Number of threads to use (default: 1)" << endl
+       << "-b, --bam                     Input file is a BAM file" << endl
+       << "-n, --num                     Output number of read in flag column (incompatible with --bam)" << endl
+       << "    --verbose                 Print out progress information every 1M proccessed reads" << endl;
 }
 
 void usageIndex() {
@@ -1466,7 +1792,8 @@ void usageEM(bool valid_input = true) {
        << "-g, --gtf                     GTF file for transcriptome information" << endl
        << "                              (required for --genomebam)" << endl
        << "-c, --chromosomes             Tab separated file with chromosome names and lengths" << endl
-       << "                              (optional for --genomebam, but recommended)" << endl;
+       << "                              (optional for --genomebam, but recommended)" << endl
+       << "    --verbose                 Print out progress information every 1M proccessed reads" << endl;
 
 }
 
@@ -1604,12 +1931,28 @@ int main(int argc, char *argv[]) {
         exit(1);
       } else {
         int num_trans, index_version;
-        int64_t num_processed, num_pseudoaligned, num_unique;
+        int64_t num_processed = 0;
+        int64_t num_pseudoaligned = 0;
+        int64_t num_unique = 0;
+
         opt.bus_mode = true;
         opt.single_end = false;
         KmerIndex index(opt);
         index.load(opt);
+
+
+        bool guessChromosomes = false;
         Transcriptome model; // empty
+        if (opt.genomebam) {
+          if (!opt.chromFile.empty()) {
+            model.loadChromosomes(opt.chromFile);
+          } else {
+            guessChromosomes = true;
+          }
+          model.parseGTF(opt.gtfFile, index, opt, guessChromosomes);
+        }
+
+
         MinCollector collection(index, opt); 
         MasterProcessor MP(index, opt, collection, model);
         num_processed = ProcessBUSReads(MP, opt);
@@ -1672,6 +2015,7 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < index.num_trans; i++) {
           num_unique += collection.counts[i];          
         }
+        num_pseudoaligned = 0;
         for (int i = 0; i < collection.counts.size(); i++) {
           num_pseudoaligned += collection.counts[i];
         }
@@ -1689,6 +2033,18 @@ int main(int argc, char *argv[]) {
             std::string(std::to_string(index_version)),
             start_time,
             call);
+
+        if (opt.pseudobam) {
+          std::vector<double> fl_means(index.target_lens_.size(),0.0);
+          EMAlgorithm em(collection.counts, index, collection, fl_means, opt);
+          MP.processAln(em, false);
+        }
+
+
+        cerr << endl;
+        if (num_pseudoaligned == 0) {
+          exit(1); // exit with error
+        }
       }
     } else if (cmd == "merge") {
       if (argc == 2) {
@@ -1803,18 +2159,25 @@ int main(int argc, char *argv[]) {
 
         std::string call = argv_to_string(argc, argv);
 
+
+        #ifdef USE_HDF5
         H5Writer writer;
         if (!opt.plaintext) {
           writer.init(opt.output + "/abundance.h5", opt.bootstrap, num_processed, fld, preBias, em.post_bias_, 6,
               index.INDEX_VERSION, call, start_time);
           writer.write_main(em, index.target_names_, index.target_lens_);
         }
+        #endif // USE_HDF5
 
         for (int i = 0; i < index.num_trans; i++) {
           num_unique += collection.counts[i];          
         }
         for (int i = 0; i < collection.counts.size(); i++) {
           num_pseudoaligned += collection.counts[i];
+        }
+
+        if (num_pseudoaligned == 0) {
+          std::cerr << "[~warn] Warning, zero reads pseudoaligned check your input files and index" << std::endl;
         }
 
         plaintext_aux(
@@ -1832,7 +2195,19 @@ int main(int argc, char *argv[]) {
         plaintext_writer(opt.output + "/abundance.tsv", em.target_names_,
             em.alpha_, em.eff_lens_, index.target_lens_);
 
-        if (opt.bootstrap > 0) {
+        if (opt.bootstrap > 0 && num_pseudoaligned == 0) {
+          // this happens if nothing aligns, then we write an empty bootstrap file
+          for (int b = 0; b < opt.bootstrap; b++) {
+            if (!opt.plaintext) {
+              #ifdef USE_HDF5
+              writer.write_bootstrap(em, b); // em is empty
+              #endif
+            } else {
+              plaintext_writer(opt.output + "/bs_abundance_" + std::to_string(b) + ".tsv",
+                    em.target_names_, em.alpha_, em.eff_lens_, index.target_lens_); // re-use empty input
+            }
+          }
+        } else if (opt.bootstrap > 0 && num_pseudoaligned > 0) {
           auto B = opt.bootstrap;
           std::mt19937_64 rand;
           rand.seed( opt.seed );
@@ -1852,9 +2227,10 @@ int main(int argc, char *argv[]) {
                 << opt.bootstrap << endl;
               n_threads = opt.bootstrap;
             }
-
+            #ifdef USE_HDF5            
             BootstrapThreadPool pool(opt.threads, seeds, collection.counts, index,
-                collection, em.eff_lens_, opt, writer, fl_means);
+                collection, em.eff_lens_, opt, &writer, fl_means);
+            #endif
           } else {
             for (auto b = 0; b < B; ++b) {
               Bootstrap bs(collection.counts, index, collection, em.eff_lens_, seeds[b], fl_means, opt);
@@ -1862,7 +2238,9 @@ int main(int argc, char *argv[]) {
               auto res = bs.run_em();
 
               if (!opt.plaintext) {
+                #ifdef USE_HDF5
                 writer.write_bootstrap(res, b);
+                #endif
               } else {
                 plaintext_writer(opt.output + "/bs_abundance_" + std::to_string(b) + ".tsv",
                     em.target_names_, res.alpha_, em.eff_lens_, index.target_lens_);
@@ -1871,15 +2249,18 @@ int main(int argc, char *argv[]) {
           }
 
           cerr << endl;
-          
+        }
 
-          if (opt.pseudobam) {
-          
-            MP.processAln(em, true);
-          }
-        } 
+        if (opt.pseudobam) {
+        
+          MP.processAln(em, true);
+        }
+        
 
         cerr << endl;
+        if (num_pseudoaligned == 0) {
+          exit(1); // exit with error
+        }
       }
     } else if (cmd == "quant-only") {
       if (argc==2) {
@@ -1926,13 +2307,13 @@ int main(int argc, char *argv[]) {
         em.run(10000, 50, true, opt.bias);
 
         std::string call = argv_to_string(argc, argv);
-        H5Writer writer;
+        //H5Writer writer;
 
         if (!opt.plaintext) {
           // setting num_processed to 0 because quant-only is for debugging/special ops
-          writer.init(opt.output + "/abundance.h5", opt.bootstrap, 0, fld, preBias, em.post_bias_, 6,
+          /* writer.init(opt.output + "/abundance.h5", opt.bootstrap, 0, fld, preBias, em.post_bias_, 6,
               index.INDEX_VERSION, call, start_time);
-          writer.write_main(em, index.target_names_, index.target_lens_);
+          writer.write_main(em, index.target_names_, index.target_lens_);*/
         } else {
           plaintext_aux(
               opt.output + "/run_info.json",
@@ -1950,7 +2331,27 @@ int main(int argc, char *argv[]) {
               em.alpha_, em.eff_lens_, index.target_lens_);
         }
 
-        if (opt.bootstrap > 0) {
+        int64_t num_pseudoaligned =0;
+
+        for (int i = 0; i < collection.counts.size(); i++) {
+          num_pseudoaligned += collection.counts[i];
+        }
+
+        if (num_pseudoaligned == 0) {
+          std::cerr << "[~warn] Warning, zero reads pseudoaligned check your input files and index" << std::endl;
+        }
+
+        if (opt.bootstrap > 0 && num_pseudoaligned == 0) {
+          // this happens if nothing aligns, then we write an empty bootstrap file
+          for (int b = 0; b < opt.bootstrap; b++) {
+            if (!opt.plaintext) {
+              //writer.write_bootstrap(em, b); // em is empty
+            } else {
+              plaintext_writer(opt.output + "/bs_abundance_" + std::to_string(b) + ".tsv",
+                    em.target_names_, em.alpha_, em.eff_lens_, index.target_lens_); // re-use empty input
+            }
+          }
+        } else if (opt.bootstrap > 0 && num_pseudoaligned > 0) {
           std::cerr << "Bootstrapping!" << std::endl;
           auto B = opt.bootstrap;
           std::mt19937_64 rand;
@@ -1971,8 +2372,8 @@ int main(int argc, char *argv[]) {
               n_threads = opt.bootstrap;
             }
 
-            BootstrapThreadPool pool(n_threads, seeds, collection.counts, index,
-                collection, em.eff_lens_, opt, writer, fl_means);
+            /*BootstrapThreadPool pool(n_threads, seeds, collection.counts, index,
+                collection, em.eff_lens_, opt, writer, fl_means);*/
           } else {
             for (auto b = 0; b < B; ++b) {
               Bootstrap bs(collection.counts, index, collection, em.eff_lens_, seeds[b], fl_means, opt);
@@ -1980,7 +2381,7 @@ int main(int argc, char *argv[]) {
               auto res = bs.run_em();
 
               if (!opt.plaintext) {
-                writer.write_bootstrap(res, b);
+                //writer.write_bootstrap(res, b);
               } else {
                 plaintext_writer(opt.output + "/bs_abundance_" + std::to_string(b) + ".tsv",
                     em.target_names_, res.alpha_, em.eff_lens_, index.target_lens_);
@@ -1989,6 +2390,10 @@ int main(int argc, char *argv[]) {
           }
         }
         cerr << endl;
+
+        if (num_pseudoaligned == 0) {
+          exit(1);
+        }
       }
     } else if (cmd == "pseudo") {
       if (argc==2) {
@@ -2035,6 +2440,11 @@ int main(int argc, char *argv[]) {
           }
         }
         
+        std::ofstream transout_f((opt.output + "/transcripts.txt"));
+        for (const auto &t : index.target_names_) {
+          transout_f << t << "\n";
+        }
+        transout_f.close();
 
         plaintext_aux(
             opt.output + "/run_info.json",
@@ -2220,12 +2630,13 @@ int main(int argc, char *argv[]) {
         usageh5dump();
         exit(1);
       }
-
+      #ifdef USE_HDF5
       H5Converter h5conv(opt.files[0], opt.output);
       if (!opt.peek) {
         h5conv.write_aux();
         h5conv.convert();
       }
+      #endif
     }  else {
       cerr << "Error: invalid command " << cmd << endl;
       usage();
