@@ -1,3 +1,8 @@
+## This is a small extension of original kallisto reporting to a separate file status of each read. 
+Status of read mapping includes number of matched k-mers and size of the union of assigned transcripts. From this one can find why read is unmapped - due to lack of k-mers included in transcripts of confict of assignment to equivalence classes. 
+For details of this report file stats.txt see file stats\_info.txt
+
+
 # kallisto
 
 __kallisto__ is a program for quantifying abundances of transcripts from
