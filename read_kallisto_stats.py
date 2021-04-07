@@ -1,5 +1,5 @@
 
-""" Class for analysing kallisto stats.txt files """
+""" Class by juliahi for analysing kallisto stats.txt files """
 
 import pandas
 

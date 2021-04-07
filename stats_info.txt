@@ -1,3 +1,5 @@
+# By juliahi:
+
 This modification of kallisto outputs to sample output directory file stats.txt with 11 columns:
 1: kmers from read1 present in transcripts 
 2: kmers from read2 present in transcripts

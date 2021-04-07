@@ -178,19 +178,24 @@ int64_t ProcessReads(MasterProcessor& MP, const  ProgramOptions& opt) {
   
   //redirect "stats" output
 
-  
+
+ // ------------ added by juliahi ---------------- 
   std::string outfile = opt.output + "/stats.txt";
   std::streambuf* oldCoutStreamBuf = std::cout.rdbuf();
   std::ofstream strCout(outfile);
   std::cout.rdbuf( strCout.rdbuf() );
 
-
+// ------------ end: added by juliahi ----------------
 
   
   MP.processReads();
   
+  // ------------ added by juliahi ----------------
+  
   // Restore old cout.
   std::cout.rdbuf( oldCoutStreamBuf );
+  
+  // ------------ end: added by juliahi ----------------
   
   numreads = MP.numreads;
   nummapped = MP.nummapped;

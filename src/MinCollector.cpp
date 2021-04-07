@@ -21,6 +21,7 @@ std::vector<int> intersect(const std::vector<int>& x, const std::vector<int>& y)
   return v;
 }
 
+// ------------ added by juliahi ----------------
 
 std::vector<int> setunion(const std::vector<int>& x, const std::vector<int>& y) {
   std::vector<int> v;
@@ -50,7 +51,7 @@ std::vector<int> setunion(const std::vector<int>& x, const std::vector<int>& y) 
   
   return v;
 }
-
+// ------------ end: added by juliahi ----------------
 
 void MinCollector::init_mean_fl_trunc(double mean, double sd) {
   auto tmp_trunc_fl = trunc_gaussian_fld(0, MAX_FRAG_LEN, mean, sd);
@@ -64,6 +65,7 @@ void MinCollector::init_mean_fl_trunc(double mean, double sd) {
   has_mean_fl_trunc = true;
 }
 
+// ------------ added by juliahi ----------------
 template<class T1, class T2>
 static void extract_second(const std::vector<std::pair<T1, T2> >& v, std::vector<T2>& v2) {
     v2.resize(v.size());
@@ -71,7 +73,9 @@ static void extract_second(const std::vector<std::pair<T1, T2> >& v, std::vector
         v2[i] = v[i].second;
     }
 }
+// ------------ end: added by juliahi ----------------
 
+// ------------ modified by juliahi ----------------
 int MinCollector::intersectKmers(std::vector<std::pair<KmerEntry,int>>& v1,
                           std::vector<std::pair<KmerEntry,int>>& v2, bool nonpaired, std::vector<int> &u) const {
   
@@ -127,6 +131,8 @@ int MinCollector::intersectKmers(std::vector<std::pair<KmerEntry,int>>& v1,
           std::cout << u.size() << std::endl;
   return 1;
 }
+
+// ------------ endi: modified by juliahi ----------------
 
 int MinCollector::collect(std::vector<std::pair<KmerEntry,int>>& v1,
                           std::vector<std::pair<KmerEntry,int>>& v2, bool nonpaired) {
@@ -269,7 +275,7 @@ std::vector<int> MinCollector::intersectECs(std::vector<std::pair<KmerEntry,int>
   return u;
 }
 
-
+// ------------ added by juliahi ----------------
 
 std::vector<int> MinCollector::countECs(std::vector<int>& v) const {
   if (v.empty()) {
@@ -334,6 +340,7 @@ std::vector<int> MinCollector::countECs(std::vector<int>& v) const {
 }*/
 
 
+// ------------ end: added by juliahi ----------------
 
 
 void MinCollector::loadCounts(ProgramOptions& opt) {

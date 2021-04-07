@@ -1362,7 +1362,7 @@ std::vector<int> KmerIndex::intersect(int ec, const std::vector<int>& v) const {
 }
 
 
-
+// ------------ added by juliahi ----------------
 // use:  res = intersect(ec,v)
 // pre:  ec is in ecmap, v is a vector of valid targets
 //       v is sorted in increasing order
@@ -1406,6 +1406,7 @@ std::vector<int> KmerIndex::setunion(int ec, const std::vector<int>& v) const {
   return res;
 }
 
+// ------------ end: added by juliahi ----------------
 
 void KmerIndex::loadTranscriptSequences() const {
   if (target_seqs_loaded) {
